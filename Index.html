@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Escape the Backrooms - Controller Pro v2</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; touch-action: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+        
+        #remoteVideo { width: 100%; height: 100%; object-fit: contain; z-index: 1; position: absolute; top:0; left:0; }
+        
+        #status {
+            position: absolute; top: 15px; left: 15px; padding: 6px 12px;
+            background: rgba(0,0,0,0.7); color: #00ffcc; font-size: 11px;
+            border-radius: 4px; z-index: 10; pointer-events: none; border: 1px solid rgba(0,255,204,0.3);
+        }
+        
+        .sys-panel { position: absolute; top: 15px; right: 15px; z-index: 10; }
+        .btn-sys { padding: 6px 12px; background: rgba(255,0,0,0.4); color: #fff; border: 1px solid #ff0000; border-radius: 4px; font-size: 11px; cursor: pointer; }
+
+        /* 🕹️ モバイルFPS完全最適化レイアウト */
+        .touch-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+        
+        .v-btn {
+            position: absolute; pointer-events: auto;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            color: #fff; font-size: 13px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            backdrop-filter: blur(2px);
+        }
+        .v-btn:active { background: rgba(0, 255, 204, 0.45); border-color: #00ffcc; color: #00ffcc; }
+
+        /* 左手：移動可動域の最適化 */
+        #joystick-container {
+            position: absolute; bottom: 40px; left: 60px; width: 140px; height: 140px;
+            background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 50%; pointer-events: auto; display: flex; align-items: center; justify-content: center;
+        }
+        #joystick-knob { width: 55px; height: 55px; background: rgba(255,255,255,0.35); border: 2px solid #fff; border-radius: 50%; }
+        
+        #btn-shift { bottom: 200px; left: 100px; width: 60px; height: 50px; border-radius: 10px; font-size: 11px; } 
+        #btn-ctrl { bottom: 85px; left: 220px; width: 65px; height: 50px; border-radius: 10px; font-size: 11px; }
+
+        /* 右手：格ゲー式ビッグサイズ配置 */
+        #btn-click { bottom: 45px; right: 45px; width: 95px; height: 95px; font-size: 16px; border-radius: 50%; background: rgba(255,255,255,0.2); } 
+        #btn-f { bottom: 65px; right: 160px; width: 65px; height: 65px; border-radius: 50%; font-size: 15px; } 
+        #btn-v { bottom: 160px; right: 45px; width: 60px; height: 60px; border-radius: 50%; font-size: 12px; } 
+        
+        #btn-q { bottom: 155px; right: 190px; width: 50px; height: 50px; border-radius: 10px; } 
+        #btn-e { bottom: 155px; right: 130px; width: 50px; height: 50px; border-radius: 10px; } 
+
+        /* 右半分全体：FPS視点トラックパッド領域 */
+        #touch-trackpad { position: absolute; top: 0; right: 0; width: 65%; height: 100%; pointer-events: auto; z-index: 3; }
+
+        /* 上部システムバー（押し間違い防止の間隔調整） */
+        .top-bar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; pointer-events: auto; z-index: 10; }
+        .rect-btn {
+            padding: 8px 16px; background: rgba(0,0,0,0.75); border: 1px solid rgba(255,255,255,0.3);
+            color: #fff; border-radius: 6px; font-size: 12px; font-weight: bold; min-width: 50px;
+        }
+        .rect-btn:active { background: rgba(0,255,204,0.3); border-color: #00ffcc; }
+    </style>
+</head>
+<body onload="autoStart()">
+
+    <video id="remoteVideo" autoplay playsinline muted></video>
+    <div id="status">Initializing Pipeline...</div>
+    
+    <div class="sys-panel">
+        <button class="btn-sys" onclick="triggerServer('STOP')">SHUTDOWN</button>
+    </div>
+
+    <div class="top-bar">
+        <button class="rect-btn" id="btn-slot1">1</button>
+        <button class="rect-btn" id="btn-slot2">2</button>
+        <button class="rect-btn" id="btn-slot3">3</button>
+        <button class="rect-btn" id="btn-c">C</button>
+        <button class="rect-btn" id="btn-i">INV (I)</button>
+        <button class="rect-btn" id="btn-tab">TAB</button>
+        <button class="rect-btn" id="btn-enter">ENTER</button>
+    </div>
+
+    <div id="touch-trackpad"></div>
+
+    <div class="touch-overlay">
+        <div id="joystick-container">
+            <div id="joystick-knob"></div>
+        </div>
+        <div class="v-btn" id="btn-shift">RUN</div>
+        <div class="v-btn" id="btn-ctrl">CROUCH</div>
+
+        <div class="v-btn" id="btn-click">USE</div>
+        <div class="v-btn" id="btn-f">F</div>
+        <div class="v-btn" id="btn-v">TALK</div>
+        <div class="v-btn" id="btn-q">Q</div>
+        <div class="v-btn" id="btn-e">E</div>
+    </div>
+
+    <script>
+        const GAS_URL = "ここにあなたのGASのWebアプリURLを貼り付ける"; 
+        let pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        let dataChannel = null;
+
+        function autoStart() {
+            updateStatus("App Launched. Synchronizing Virtual Pad...");
+            triggerServer('START');
+            setupController();
+        }
+
+        async function triggerServer(command) {
+            try {
+                await fetch(GAS_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    body: JSON.stringify({ action: "trigger_server", command: command })
+                });
+                if(command === 'START') setTimeout(initiateWebRTC, 7000);
+            } catch (e) { updateStatus("Signal failed."); }
+        }
+
+        async function initiateWebRTC() {
+            dataChannel = pc.createDataChannel("inputChannel");
+            dataChannel.onopen = () => { updateStatus("Linked (Control Active)"); };
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify({ action: "send_offer", offer: offer.sdp }) });
+            
+            let answerCheck = setInterval(async () => {
+                try {
+                    let res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "get_answer" }) });
+                    let data = await res.json();
+                    if (data.status === "CONNECTED" && data.answer) {
+                        clearInterval(answerCheck);
+                        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.answer }));
+                        updateStatus("Playing System Ready.");
+                    }
+                } catch(e) {}
+            }, 3000);
+        }
+        pc.ontrack = (e) => { document.getElementById('remoteVideo').srcObject = e.streams[0]; };
+        function updateStatus(msg) { document.getElementById('status').innerText = msg; }
+
+        function sendInput(payload) {
+            if (dataChannel && dataChannel.readyState === "open") {
+                dataChannel.send(JSON.stringify(payload));
+            }
+        }
+
+        function setupController() {
+            const mappings = {
+                'btn-shift': { type: 'key', key: 'ShiftLeft' },
+                'btn-ctrl': { type: 'key', key: 'ControlLeft' },
+                'btn-f': { type: 'key', key: 'KeyF' },
+                'btn-q': { type: 'key', key: 'KeyQ' },
+                'btn-e': { type: 'key', key: 'KeyE' },
+                'btn-v': { type: 'key', key: 'KeyV' },
+                'btn-slot1': { type: 'key', key: 'Digit1' },
+                'btn-slot2': { type: 'key', key: 'Digit2' },
+                'btn-slot3': { type: 'key', key: 'Digit3' },
+                'btn-c': { type: 'key', key: 'KeyC' },
+                'btn-i': { type: 'key', key: 'KeyI' },
+                'btn-tab': { type: 'key', key: 'Tab' },
+                'btn-enter': { type: 'key', key: 'Enter' },
+                'btn-click': { type: 'mouse_click', button: 'left' }
+            };
+
+            Object.keys(mappings).forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const map = mappings[id];
+                
+                el.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (map.type === 'key') sendInput({ type: 'keydown', key: map.key });
+                    else if (map.type === 'mouse_click') sendInput({ type: 'mousedown', button: map.button });
+                });
+
+                el.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    if (map.type === 'key') sendInput({ type: 'keyup', key: map.key });
+                    else if (map.type === 'mouse_click') sendInput({ type: 'mouseup', button: map.button });
+                });
+            });
+
+            // 仮想スティック（アナログ計算）
+            const container = document.getElementById('joystick-container');
+            const knob = document.getElementById('joystick-knob');
+            const maxRadius = 50; 
+            let stickActive = false;
+
+            container.addEventListener('touchstart', (e) => { stickActive = true; });
+            container.addEventListener('touchmove', (e) => {
+                if (!stickActive) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = container.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let deltaX = touch.clientX - centerX;
+                let deltaY = touch.clientY - centerY;
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                if (distance > maxRadius) {
+                    deltaX = (deltaX / distance) * maxRadius;
+                    deltaY = (deltaY / distance) * maxRadius;
+                }
+
+                knob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                sendInput({ type: 'joystick_move', x: deltaX / maxRadius, y: deltaY / maxRadius });
+            });
+
+            container.addEventListener('touchend', (e) => {
+                stickActive = false;
+                knob.style.transform = 'translate(0px, 0px)';
+                sendInput({ type: 'joystick_move', x: 0, y: 0 });
+            });
+
+            // FPSスタイル視点トラックパッド（感度最適化）
+            const trackpad = document.getElementById('touch-trackpad');
+            let lastTouchX = 0, lastTouchY = 0, trackActive = false;
+
+            trackpad.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+                trackActive = true;
+            });
+
+            trackpad.addEventListener('touchmove', (e) => {
+                if (!trackActive) return;
+                const touch = e.touches[0];
+                const movementX = (touch.clientX - lastTouchX) * 1.8; 
+                const movementY = (touch.clientY - lastTouchY) * 1.8;
+
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+
+                sendInput({ type: 'mouse_move', dx: movementX, dy: movementY });
+            });
+
+            trackpad.addEventListener('touchend', () => { trackActive = false; });
+        }
+    </script>
+</body>
+</html>
